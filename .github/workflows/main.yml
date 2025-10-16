@@ -9,7 +9,6 @@ jobs:
     timeout-minutes: 360
 
     steps:
-      # ✅ Gunakan PowerShell di semua langkah agar stabil
       - name: Enable RDP
         shell: pwsh
         run: |
@@ -35,7 +34,6 @@ jobs:
         shell: pwsh
         run: |
           & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILESCALE_AUTH_KEY }} --hostname=gh-rdp-${{ github.run_id }}
-          # ✅ Tambahan: sleep lebih lama agar IP stabil
           Start-Sleep -Seconds 20
           $ip = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
           echo "TAILSCALE_IP=$ip" >> $env:GITHUB_ENV
@@ -43,39 +41,62 @@ jobs:
       - name: Send Info to Discord
         shell: pwsh
         run: |
+          $ip = $env:TAILSCALE_IP
+          $pass = $env:RDP_PASS
+
           $embed = @{
-              "title"       = "🌐 GitHub RDP Siap Digunakan!"
-              "description" = "Mesin virtual Windows telah aktif dan siap untuk koneksi RDP."
-              "color"       = "5814783"
-              "fields"      = @(
+              "title" = "💻 RDP Instance Aktif!"
+              "description" = "Windows RDP kamu sudah siap digunakan 🚀"
+              "color" = 3447003
+              "thumbnail" = @{
+                  "url" = "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png"
+              }
+              "fields" = @(
                   @{
-                      "name"   = "IP Tailscale"
-                      "value"  = "`$($env:TAILSCALE_IP)`"
+                      "name" = "🌐 IP Tailscale"
+                      "value" = "`$ip`"
                       "inline" = $false
                   },
                   @{
-                      "name"   = "Username"
-                      "value"  = "`RDP`"
+                      "name" = "👤 Username"
+                      "value" = "`RDP`"
                       "inline" = $true
                   },
                   @{
-                      "name"   = "Password"
-                      "value"  = "`$($env:RDP_PASS)`"
+                      "name" = "🔑 Password"
+                      "value" = "`$pass`"
                       "inline" = $true
                   }
               )
               "footer" = @{
-                  "text" = "Dijalankan pada: $(Get-Date -Format 'dd-MM-yyyy HH:mm:ss')"
+                  "text" = "🕒 Dijalankan pada: $(Get-Date -Format 'dd-MM-yyyy HH:mm:ss')"
+              }
+              "author" = @{
+                  "name" = "GitHub Actions Bot"
+                  "icon_url" = "https://avatars.githubusercontent.com/u/9919?s=200&v=4"
               }
           }
 
           $payload = @{
+              "content" = "**RDP baru telah aktif! Klik tombol di bawah untuk melihat detail.**"
               "embeds" = @($embed)
-          } | ConvertTo-Json -Depth 3
+              "components" = @(
+                  @{
+                      "type" = 1
+                      "components" = @(
+                          @{
+                              "type" = 2
+                              "style" = 5
+                              "label" = "🌍 Open Tailscale Admin"
+                              "url" = "https://login.tailscale.com/admin/machines"
+                          }
+                      )
+                  }
+              )
+          } | ConvertTo-Json -Depth 5
 
           Invoke-RestMethod -Uri "${{ secrets.DISCORD_WEBHOOK }}" -Method POST -Body $payload -ContentType 'application/json'
 
-      # ✅ Tambahan: biar ada notifikasi di log kalau setup udah selesai
       - name: Finished Setup
         shell: pwsh
         run: Write-Host "✅ RDP setup complete! You can now connect using the credentials sent to Discord."
