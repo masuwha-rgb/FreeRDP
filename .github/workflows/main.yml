@@ -38,57 +38,57 @@ jobs:
           $ip = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
           echo "TAILSCALE_IP=$ip" >> $env:GITHUB_ENV
 
-      - name: Send Info to Discord
+            - name: Send Info to Discord
         shell: pwsh
         run: |
           $ip = $env:TAILSCALE_IP
           $pass = $env:RDP_PASS
 
           $embed = @{
-              "title" = "💻 RDP Instance Aktif!"
-              "description" = "Windows RDP kamu sudah siap digunakan 🚀"
-              "color" = 3447003
-              "thumbnail" = @{
-                  "url" = "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png"
+              title = "💻 RDP Instance Aktif!"
+              description = "Windows RDP kamu sudah siap digunakan 🚀"
+              color = 3447003
+              thumbnail = @{
+                  url = "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png"
               }
-              "fields" = @(
+              fields = @(
                   @{
-                      "name" = "🌐 IP Tailscale"
-                      "value" = "`$ip`"
-                      "inline" = $false
+                      name = "🌐 IP Tailscale"
+                      value = "$ip"
+                      inline = $false
                   },
                   @{
-                      "name" = "👤 Username"
-                      "value" = "`RDP`"
-                      "inline" = $true
+                      name = "👤 Username"
+                      value = "RDP"
+                      inline = $true
                   },
                   @{
-                      "name" = "🔑 Password"
-                      "value" = "`$pass`"
-                      "inline" = $true
+                      name = "🔑 Password"
+                      value = "$pass"
+                      inline = $true
                   }
               )
-              "footer" = @{
-                  "text" = "🕒 Dijalankan pada: $(Get-Date -Format 'dd-MM-yyyy HH:mm:ss')"
+              footer = @{
+                  text = "🕒 Dijalankan pada: $(Get-Date -Format 'dd-MM-yyyy HH:mm:ss')"
               }
-              "author" = @{
-                  "name" = "GitHub Actions Bot"
-                  "icon_url" = "https://avatars.githubusercontent.com/u/9919?s=200&v=4"
+              author = @{
+                  name = "GitHub Actions Bot"
+                  icon_url = "https://avatars.githubusercontent.com/u/9919?s=200&v=4"
               }
           }
 
           $payload = @{
-              "content" = "**RDP baru telah aktif! Klik tombol di bawah untuk melihat detail.**"
-              "embeds" = @($embed)
-              "components" = @(
+              content = "**RDP baru telah aktif! Klik tombol di bawah untuk melihat detail.**"
+              embeds = @($embed)
+              components = @(
                   @{
-                      "type" = 1
-                      "components" = @(
+                      type = 1
+                      components = @(
                           @{
-                              "type" = 2
-                              "style" = 5
-                              "label" = "🌍 Open Tailscale Admin"
-                              "url" = "https://login.tailscale.com/admin/machines"
+                              type = 2
+                              style = 5
+                              label = "🌍 Open Tailscale Admin"
+                              url = "https://login.tailscale.com/admin/machines"
                           }
                       )
                   }
@@ -96,6 +96,7 @@ jobs:
           } | ConvertTo-Json -Depth 5
 
           Invoke-RestMethod -Uri "${{ secrets.DISCORD_WEBHOOK }}" -Method POST -Body $payload -ContentType 'application/json'
+
 
       - name: Finished Setup
         shell: pwsh
