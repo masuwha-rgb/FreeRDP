@@ -28,7 +28,7 @@ jobs:
       - name: Install Tailscale
         shell: pwsh
         run: |
-          winget install --id=Tailscale.Tailscale -e --scope machine
+          winget install --id=Tailscale.Tailscale -e --scope machine --accept-package-agreements --accept-source-agreements
 
       - name: Connect Tailscale
         shell: pwsh
