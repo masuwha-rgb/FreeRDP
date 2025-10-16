@@ -16,7 +16,7 @@ jobs:
 
       - name: Create RDP User
         run: |
-          $password = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 12 | % {[char]$_})
+          $password = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 16 | ForEach-Object {[char]$_})
           $securePass = ConvertTo-SecureString $password -AsPlainText -Force
           New-LocalUser -Name "RDP" -Password $securePass -AccountNeverExpires
           Add-LocalGroupMember -Group "Administrators" -Member "RDP"
@@ -25,8 +25,8 @@ jobs:
 
       - name: Install Tailscale
         run: |
-          Invoke-WebRequest -Uri "https://pkgs.tailscale.com/stable/tailscale-setup-1.82.0-amd64.msi" -OutFile "$env:TEMP\ts.msi"
-          Start-Process msiexec.exe -ArgumentList '/i', "$env:TEMP\ts.msi", '/quiet', '/norestart' -Wait
+          # Menggunakan winget untuk menginstal versi Tailscale terbaru
+          winget install --id=Tailscale.Tailscale -e --scope machine
 
       - name: Connect Tailscale
         run: |
@@ -37,12 +37,42 @@ jobs:
 
       - name: Send Info to Discord
         run: |
-          $msg = "🌐 **GitHub RDP Active!**`nIP: $env:TAILSCALE_IP`nUsername: RDP`nPassword: $env:RDP_PASS"
-          Invoke-RestMethod -Uri "${{ secrets.DISCORD_WEBHOOK }}" -Method POST -Body (@{content=$msg} | ConvertTo-Json) -ContentType 'application/json'
+          $embed = @{
+              "title"       = "🌐 GitHub RDP Siap Digunakan!"
+              "description" = "Mesin virtual Windows telah aktif dan siap untuk koneksi RDP."
+              "color"       = "5814783" # Warna hijau
+              "fields"      = @(
+                  @{
+                      "name"   = "IP Tailscale"
+                      "value"  = "`$($env:TAILSCALE_IP)`"
+                      "inline" = $false
+                  },
+                  @{
+                      "name"   = "Username"
+                      "value"  = "`RDP`"
+                      "inline" = $true
+                  },
+                  @{
+                      "name"   = "Password"
+                      "value"  = "`$($env:RDP_PASS)`"
+                      "inline" = $true
+                  }
+              )
+              "footer" = @{
+                  "text" = "Dijalankan pada: $(Get-Date -Format 'dd-MM-yyyy HH:mm:ss')"
+              }
+          }
+
+          $payload = @{
+              "embeds" = @($embed)
+          } | ConvertTo-Json -Depth 3
+
+          Invoke-RestMethod -Uri "${{ secrets.DISCORD_WEBHOOK }}" -Method POST -Body $payload -ContentType 'application/json'
+
 
       - name: Keep Alive
         run: |
           while ($true) {
-            Write-Host "[$(Get-Date)] RDP Still Running..."
+            Write-Host "[$(Get-Date)] RDP masih berjalan..."
             Start-Sleep -Seconds 300
           }
