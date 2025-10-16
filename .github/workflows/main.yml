@@ -9,12 +9,15 @@ jobs:
     timeout-minutes: 360
 
     steps:
+      # ✅ Gunakan PowerShell di semua langkah agar stabil
       - name: Enable RDP
+        shell: pwsh
         run: |
           Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -Value 0
           netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
 
       - name: Create RDP User
+        shell: pwsh
         run: |
           $password = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 16 | ForEach-Object {[char]$_})
           $securePass = ConvertTo-SecureString $password -AsPlainText -Force
@@ -24,23 +27,26 @@ jobs:
           echo "RDP_PASS=$password" >> $env:GITHUB_ENV
 
       - name: Install Tailscale
+        shell: pwsh
         run: |
-          # Menggunakan winget untuk menginstal versi Tailscale terbaru
           winget install --id=Tailscale.Tailscale -e --scope machine
 
       - name: Connect Tailscale
+        shell: pwsh
         run: |
           & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILESCALE_AUTH_KEY }} --hostname=gh-rdp-${{ github.run_id }}
-          Start-Sleep -Seconds 10
+          # ✅ Tambahan: sleep lebih lama agar IP stabil
+          Start-Sleep -Seconds 20
           $ip = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
           echo "TAILSCALE_IP=$ip" >> $env:GITHUB_ENV
 
       - name: Send Info to Discord
+        shell: pwsh
         run: |
           $embed = @{
               "title"       = "🌐 GitHub RDP Siap Digunakan!"
               "description" = "Mesin virtual Windows telah aktif dan siap untuk koneksi RDP."
-              "color"       = "5814783" # Warna hijau
+              "color"       = "5814783"
               "fields"      = @(
                   @{
                       "name"   = "IP Tailscale"
@@ -69,8 +75,13 @@ jobs:
 
           Invoke-RestMethod -Uri "${{ secrets.DISCORD_WEBHOOK }}" -Method POST -Body $payload -ContentType 'application/json'
 
+      # ✅ Tambahan: biar ada notifikasi di log kalau setup udah selesai
+      - name: Finished Setup
+        shell: pwsh
+        run: Write-Host "✅ RDP setup complete! You can now connect using the credentials sent to Discord."
 
       - name: Keep Alive
+        shell: pwsh
         run: |
           while ($true) {
             Write-Host "[$(Get-Date)] RDP masih berjalan..."
