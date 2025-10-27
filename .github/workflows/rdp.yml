@@ -45,21 +45,24 @@ jobs:
         shell: pwsh
         run: |
           & "$env:ProgramFiles\Tailscale\tailscale.exe" up `
-            --authkey=${{ secrets.TAILESCALE_AUTH_KEY }} `
-            --hostname=gh-rdp-${{ github.run_id }}
+            --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} `
+            --hostname=gh-rdp-${{ github.run_id }} `
+            --accept-dns=false `
+            --accept-routes=false `
+            --shields-up
 
           Start-Sleep -Seconds 20
-          $ip = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
+          $ip = (& "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4)[0]
           echo "TAILSCALE_IP=$ip" >> $env:GITHUB_ENV
 
-      # 5️⃣ Install Node.js dan PM2
+      # === 5️⃣ Install Node.js dan PM2 ===
       - name: Install Node.js + PM2
         shell: pwsh
         run: |
-          winget install OpenJS.NodeJS.LTS -e --scope machine
+          winget install -e --id OpenJS.NodeJS.LTS
           npm install -g pm2
 
-      # 6️⃣ Clone dan jalankan StreamFlow
+      # === 6️⃣ Clone dan jalankan StreamFlow ===
       - name: Install StreamFlow
         shell: pwsh
         run: |
@@ -69,8 +72,8 @@ jobs:
           npm install
           pm2 start app.js --name "streamflow"
           pm2 save
-      
-      # === 5️⃣ Send Info to Discord ===
+
+      # === 7️⃣ Send Info ke Discord ===
       - name: Send Info to Discord
         shell: pwsh
         run: |
@@ -126,21 +129,15 @@ jobs:
                       )
                   }
               )
-          } | ConvertTo-Json -Depth 5
+          } | ConvertTo-Json -Depth 6
 
           Invoke-RestMethod -Uri "${{ secrets.DISCORD_WEBHOOK }}" -Method POST -Body $payload -ContentType 'application/json'
-      
 
-      # === 6️⃣ Finished Setup Log ===
-      - name: Finished Setup
-        shell: pwsh
-        run: Write-Host "✅ RDP setup complete! You can now connect using the credentials sent to Discord."
-
-      # === 7️⃣ Keep Alive ===
+      # === 8️⃣ Keep Alive ===
       - name: Keep Alive
         shell: pwsh
         run: |
           while ($true) {
-            Write-Host "[$(Get-Date)] RDP masih berjalan..."
+            Write-Host "[$(Get-Date)] ✅ RDP masih berjalan..."
             Start-Sleep -Seconds 300
           }
