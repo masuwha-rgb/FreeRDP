@@ -1,25 +1,22 @@
-name: RDP
+name: RDP + StreamFlow
 
 on:
   workflow_dispatch:
 
 jobs:
-  secure-rdp:
+  setup-rdp:
     runs-on: windows-latest
     timeout-minutes: 360
 
     steps:
-      # === 1️⃣ Enable RDP ===
-      - name: Enable RDP
+      # 1️⃣ Aktifkan RDP
+      - name: Enable RDP Access
         shell: pwsh
         run: |
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' `
-                           -Name "fDenyTSConnections" -Value 0 -Force
-          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server\WinStations\RDP-Tcp' `
-                           -Name "UserAuthentication" -Value 0 -Force
+          Set-ItemProperty -Path 'HKLM:\System\CurrentControlSet\Control\Terminal Server' -Name fDenyTSConnections -Value 0
           netsh advfirewall firewall add rule name="RDP" dir=in action=allow protocol=TCP localport=3389
 
-      # === 2️⃣ Create RDP User ===
+      # 2️⃣ Buat user baru
       - name: Create RDP User
         shell: pwsh
         run: |
@@ -30,29 +27,40 @@ jobs:
           Add-LocalGroupMember -Group "Remote Desktop Users" -Member "RDP"
           echo "RDP_PASS=$password" >> $env:GITHUB_ENV
 
-      # === 3️⃣ Install Tailscale (tanpa prompt) ===
+      # 3️⃣ Install Tailscale
       - name: Install Tailscale
         shell: pwsh
         run: |
-          $url = "https://pkgs.tailscale.com/stable/tailscale-setup-latest-amd64.msi"
-          $out = "$env:TEMP\tailscale.msi"
-          Invoke-WebRequest -Uri $url -OutFile $out
-          Start-Process msiexec.exe -ArgumentList "/i `"$out`" /qn /norestart" -Wait
-          Remove-Item $out -Force
+          winget install --id=Tailscale.Tailscale -e --scope machine
 
-      # === 4️⃣ Connect Tailscale ===
+      # 4️⃣ Connect ke Tailscale
       - name: Connect Tailscale
         shell: pwsh
         run: |
-          & "$env:ProgramFiles\Tailscale\tailscale.exe" up `
-            --authkey=${{ secrets.TAILESCALE_AUTH_KEY }} `
-            --hostname=gh-rdp-${{ github.run_id }}
-
-          Start-Sleep -Seconds 20
+          & "$env:ProgramFiles\Tailscale\tailscale.exe" up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-rdp-${{ github.run_id }}
+          Start-Sleep -Seconds 15
           $ip = & "$env:ProgramFiles\Tailscale\tailscale.exe" ip -4
           echo "TAILSCALE_IP=$ip" >> $env:GITHUB_ENV
 
-      # === 5️⃣ Send Info to Discord ===
+      # 5️⃣ Install Node.js dan PM2
+      - name: Install Node.js + PM2
+        shell: pwsh
+        run: |
+          winget install OpenJS.NodeJS.LTS -e --scope machine
+          npm install -g pm2
+
+      # 6️⃣ Clone dan jalankan StreamFlow
+      - name: Install StreamFlow
+        shell: pwsh
+        run: |
+          cd $env:USERPROFILE
+          git clone https://github.com/bangtutorial/streamflow.git
+          cd streamflow
+          npm install
+          pm2 start app.js --name "streamflow"
+          pm2 save
+
+      # 7️⃣ Kirim informasi RDP ke Discord
       - name: Send Info to Discord
         shell: pwsh
         run: |
@@ -60,68 +68,42 @@ jobs:
           $pass = $env:RDP_PASS
 
           $embed = @{
-              title = "💻 RDP Instance Aktif!"
-              description = "Windows RDP kamu sudah siap digunakan 🚀"
-              color = 3447003
-              thumbnail = @{
-                  url = "https://github.githubassets.com/images/modules/logos_page/GitHub-Mark.png"
-              }
-              fields = @(
+              "title" = "💻 RDP + StreamFlow Aktif!"
+              "description" = "Instance Windows siap digunakan dan StreamFlow sudah berjalan 🚀"
+              "color" = 3447003
+              "fields" = @(
                   @{
-                      name = "🌐 IP Tailscale"
-                      value = "$ip"
-                      inline = $false
+                      "name" = "🌐 IP Tailscale"
+                      "value" = "`$ip`"
+                      "inline" = $false
                   },
                   @{
-                      name = "👤 Username"
-                      value = "RDP (masuwha)"
-                      inline = $true
+                      "name" = "👤 Username"
+                      "value" = "`RDP` (masuwha)"
+                      "inline" = $true
                   },
                   @{
-                      name = "🔑 Password"
-                      value = "$pass"
-                      inline = $true
+                      "name" = "🔑 Password"
+                      "value" = "`$pass`"
+                      "inline" = $true
                   }
               )
-              footer = @{
-                  text = "🕒 Dijalankan pada: $(Get-Date -Format 'dd-MM-yyyy HH:mm:ss')"
-              }
-              author = @{
-                  name = "GitHub Actions Bot"
-                  icon_url = "https://avatars.githubusercontent.com/u/9919?s=200&v=4"
+              "footer" = @{
+                  "text" = "🕒 Dijalankan pada: $(Get-Date -Format 'dd-MM-yyyy HH:mm:ss')"
               }
           }
 
           $payload = @{
-              content = "**✅ RDP baru telah aktif! Detail ada di bawah ini.**"
-              embeds = @($embed)
-              components = @(
-                  @{
-                      type = 1
-                      components = @(
-                          @{
-                              type = 2
-                              style = 5
-                              label = "🌍 Open Tailscale Admin"
-                              url = "https://login.tailscale.com/admin/machines"
-                          }
-                      )
-                  }
-              )
+              "embeds" = @($embed)
           } | ConvertTo-Json -Depth 5
 
           Invoke-RestMethod -Uri "${{ secrets.DISCORD_WEBHOOK }}" -Method POST -Body $payload -ContentType 'application/json'
 
-      # === 6️⃣ Finished Setup Log ===
-      - name: Finished Setup
-        shell: pwsh
-        run: Write-Host "✅ RDP setup complete! You can now connect using the credentials sent to Discord."
-
-      # === 7️⃣ Keep Alive ===
+      # 8️⃣ Keep-alive loop biar ga mati
       - name: Keep Alive
         shell: pwsh
         run: |
           while ($true) {
-            Write-Host "[$(Get-Date)] RDP masih berjalan..."
+            Write-Host "[$(Get-Date)] ✅ RDP & StreamFlow masih berjalan..."
             Start-Sleep -Seconds 300
           }
