@@ -1,0 +1,79 @@
+name: VPS-Ubuntu
+
+on:
+  workflow_dispatch:
+
+jobs:
+  setup-vps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      # === 1️⃣ Update dan Install Basic Tools ===
+      - name: Update system
+        run: |
+          sudo apt update -y
+          sudo apt install -y curl wget git unzip
+
+      # === 2️⃣ Install Tailscale ===
+      - name: Install Tailscale
+        run: |
+          curl -fsSL https://tailscale.com/install.sh | sh
+          sudo tailscale up --authkey=${{ secrets.TAILSCALE_AUTH_KEY }} --hostname=gh-vps-${{ github.run_id }} --ssh
+          sleep 10
+          echo "TAILSCALE_IP=$(tailscale ip -4 | head -n 1)" >> $GITHUB_ENV
+
+      # === 3️⃣ Install Node.js + PM2 ===
+      - name: Install Node.js LTS + PM2
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_lts.x | sudo -E bash -
+          sudo apt install -y nodejs
+          sudo npm install -g pm2
+
+      # === 4️⃣ Clone dan Jalankan StreamFlow ===
+      - name: Clone & Run StreamFlow
+        run: |
+          cd ~
+          git clone https://github.com/bangtutorial/streamflow.git
+          cd streamflow
+          npm install
+          pm2 start app.js --name streamflow
+          pm2 save
+
+      # === 5️⃣ Kirim Info ke Discord ===
+      - name: Send Info to Discord
+        run: |
+          IP=${{ env.TAILSCALE_IP }}
+          USER=$(whoami)
+          TIME=$(date +"%d-%m-%Y %H:%M:%S")
+
+          PAYLOAD=$(jq -n \
+            --arg ip "$IP" \
+            --arg user "$USER" \
+            --arg time "$TIME" \
+            '{
+              "content": "**✅ VPS Ubuntu baru aktif!**",
+              "embeds": [{
+                "title": "🐧 VPS Instance Aktif",
+                "description": "Instance Ubuntu kamu sudah siap digunakan 🚀",
+                "color": 3447003,
+                "fields": [
+                  {"name": "🌐 IP Tailscale", "value": $ip, "inline": false},
+                  {"name": "👤 Username", "value": $user, "inline": true},
+                  {"name": "🕒 Dijalankan pada", "value": $time, "inline": true}
+                ],
+                "footer": {"text": "GitHub Actions Bot - Linux Mode"}
+              }]
+            }')
+
+          curl -H "Content-Type: application/json" \
+               -d "$PAYLOAD" \
+               ${{ secrets.DISCORD_WEBHOOK }}
+
+      # === 6️⃣ Keep Alive ===
+      - name: Keep Alive
+        run: |
+          while true; do
+            echo "[$(date)] VPS masih berjalan..."
+            sleep 300
+          done
